@@ -132,8 +132,7 @@ public class ShowMissingDiskStoresFunctionJUnitTest {
   }
 
   /**
-   * Test method for
-   * {@link ShowMissingDiskStoresFunction#execute(FunctionContext)}.
+   * Test method for {@link ShowMissingDiskStoresFunction#execute(FunctionContext)}.
    */
   @Test
   public final void testExecute() {

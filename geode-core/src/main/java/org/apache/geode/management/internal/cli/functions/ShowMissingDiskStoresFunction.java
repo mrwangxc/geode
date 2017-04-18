@@ -35,7 +35,7 @@ import org.apache.geode.internal.cache.persistence.PersistentMemberPattern;
 
 public class ShowMissingDiskStoresFunction extends FunctionAdapter implements InternalEntity {
 
-  protected Cache getCache() {
+  protected InternalCache getCache() {
     return GemFireCacheImpl.getInstance();
   }
 
@@ -48,16 +48,14 @@ public class ShowMissingDiskStoresFunction extends FunctionAdapter implements In
       throw new RuntimeException();
     }
     try {
-      final Cache cache = getCache();
+      final InternalCache cache = getCache();
 
       if (cache != null) {
-        final GemFireCacheImpl gfci = (GemFireCacheImpl) cache;
+        if (cache != null && !cache.isClosed()) {
+          final DistributedMember member = cache.getMyId();
 
-        final DistributedMember member = gfci.getMyId();
-
-        if (gfci != null && !gfci.isClosed()) {
           // Missing DiskStores
-          PersistentMemberManager mm = gfci.getPersistentMemberManager();
+          PersistentMemberManager mm = cache.getPersistentMemberManager();
           Map<String, Set<PersistentMemberID>> waitingRegions = mm.getWaitingRegions();
           for (Map.Entry<String, Set<PersistentMemberID>> entry : waitingRegions.entrySet()) {
             for (PersistentMemberID id : entry.getValue()) {
@@ -65,7 +63,7 @@ public class ShowMissingDiskStoresFunction extends FunctionAdapter implements In
             }
           }
           // Missing colocated regions
-          Set<PartitionedRegion> prs = gfci.getPartitionedRegions();
+          Set<PartitionedRegion> prs = ((GemFireCacheImpl) cache).getPartitionedRegions();
           for (PartitionedRegion pr : prs) {
             List<String> missingChildRegions = pr.getMissingColocatedChildren();
             for (String child : missingChildRegions) {
@@ -74,7 +72,6 @@ public class ShowMissingDiskStoresFunction extends FunctionAdapter implements In
             }
           }
         }
-
       }
 
       if (memberMissingIDs.isEmpty() && missingColocatedRegions.isEmpty()) {
