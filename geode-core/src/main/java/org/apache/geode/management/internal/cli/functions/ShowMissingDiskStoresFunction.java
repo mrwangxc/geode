@@ -36,7 +36,7 @@ import org.apache.geode.internal.cache.persistence.PersistentMemberPattern;
 public class ShowMissingDiskStoresFunction extends FunctionAdapter implements InternalEntity {
 
   protected Cache getCache() {
-    return CacheFactory.getAnyInstance();
+    return GemFireCacheImpl.getInstance();
   }
 
   @Override
@@ -50,12 +50,11 @@ public class ShowMissingDiskStoresFunction extends FunctionAdapter implements In
     try {
       final Cache cache = getCache();
 
-      if (cache instanceof InternalCache) {
-        final InternalCache gemfireCache = (InternalCache) cache;
+      if (cache != null) {
+        final GemFireCacheImpl gfci = (GemFireCacheImpl) cache;
 
-        final DistributedMember member = gemfireCache.getMyId();
+        final DistributedMember member = gfci.getMyId();
 
-        GemFireCacheImpl gfci = GemFireCacheImpl.getInstance();
         if (gfci != null && !gfci.isClosed()) {
           // Missing DiskStores
           PersistentMemberManager mm = gfci.getPersistentMemberManager();
