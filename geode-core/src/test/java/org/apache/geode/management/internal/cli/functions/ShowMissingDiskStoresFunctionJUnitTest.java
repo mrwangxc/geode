@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.geode.internal.cache.InternalCache;
 import org.apache.logging.log4j.core.Appender;
 import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.Logger;
@@ -109,14 +110,14 @@ public class ShowMissingDiskStoresFunctionJUnitTest {
 
   private class TestSMDSFFunc1 extends ShowMissingDiskStoresFunction {
     @Override
-    protected Cache getCache() {
+    protected InternalCache getCache() {
       return null;
     }
   }
 
   private class TestSMDSFFunc2 extends ShowMissingDiskStoresFunction {
     @Override
-    protected Cache getCache() {
+    protected InternalCache getCache() {
       return cache;
     }
   }
