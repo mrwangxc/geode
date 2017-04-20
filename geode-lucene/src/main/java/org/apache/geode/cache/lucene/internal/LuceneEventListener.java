@@ -31,7 +31,9 @@ import org.apache.geode.cache.Region;
 import org.apache.geode.cache.RegionDestroyedException;
 import org.apache.geode.cache.asyncqueue.AsyncEvent;
 import org.apache.geode.cache.asyncqueue.AsyncEventListener;
+import org.apache.geode.cache.execute.FunctionService;
 import org.apache.geode.cache.lucene.internal.repository.RepositoryManager;
+import org.apache.geode.cache.lucene.internal.distributed.PokeLuceneAsyncQueueFunction;
 import org.apache.geode.cache.lucene.internal.repository.IndexRepository;
 import org.apache.geode.cache.query.internal.DefaultQuery;
 import org.apache.geode.internal.cache.BucketNotFoundException;
@@ -111,18 +113,32 @@ public class LuceneEventListener implements AsyncEventListener {
       }
       return true;
     } catch (BucketNotFoundException | RegionDestroyedException | PrimaryBucketException e) {
+      redistributeEvents(events);
       logger.debug("Bucket not found while saving to lucene index: " + e.getMessage(), e);
       return false;
     } catch (CacheClosedException e) {
       logger.debug("Unable to save to lucene index, cache has been closed", e);
       return false;
     } catch (AlreadyClosedException e) {
+      redistributeEvents(events);
       logger.debug("Unable to commit, the lucene index is already closed", e);
       return false;
     } catch (IOException e) {
       throw new InternalGemFireError("Unable to save to lucene index", e);
     } finally {
       DefaultQuery.setPdxReadSerialized(false);
+    }
+  }
+
+  private void redistributeEvents(final List<AsyncEvent> events) {
+    for (AsyncEvent event : events) {
+      try {
+        FunctionService.onRegion(event.getRegion())
+            .withArgs(new Object[] {event.getRegion().getName(), event.getKey(), event})
+            .execute(PokeLuceneAsyncQueueFunction.ID);
+      } catch (RegionDestroyedException | PrimaryBucketException | CacheClosedException e) {
+        logger.debug("Unable to redistribute async event for :" + event.getKey() + " : " + event);
+      }
     }
   }
 

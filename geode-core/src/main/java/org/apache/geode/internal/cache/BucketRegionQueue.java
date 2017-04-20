@@ -584,6 +584,10 @@ public class BucketRegionQueue extends AbstractBucketRegionQueue {
     this.notifyEntriesRemoved();
   }
 
+  public Object firstEventSeqNum() {
+    return this.eventSeqNumQueue.peek();
+  }
+
   public boolean isReadyForPeek() {
     return !this.getPartitionedRegion().isDestroyed() && !this.isEmpty()
         && !this.eventSeqNumQueue.isEmpty() && getBucketAdvisor().isPrimary();

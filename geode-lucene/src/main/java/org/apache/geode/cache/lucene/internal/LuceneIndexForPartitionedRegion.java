@@ -15,20 +15,28 @@
 
 package org.apache.geode.cache.lucene.internal;
 
+import java.util.HashMap;
+import java.util.List;
 import java.util.Set;
 
 import org.apache.geode.CancelException;
 import org.apache.geode.cache.AttributesFactory;
+import org.apache.geode.cache.CacheClosedException;
 import org.apache.geode.cache.FixedPartitionResolver;
 import org.apache.geode.cache.PartitionAttributes;
 import org.apache.geode.cache.PartitionAttributesFactory;
 import org.apache.geode.cache.PartitionResolver;
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.RegionAttributes;
+import org.apache.geode.cache.RegionDestroyedException;
 import org.apache.geode.cache.RegionShortcut;
+import org.apache.geode.cache.asyncqueue.AsyncEvent;
+import org.apache.geode.cache.asyncqueue.AsyncEventQueue;
+import org.apache.geode.cache.asyncqueue.internal.AsyncEventQueueImpl;
 import org.apache.geode.cache.execute.FunctionService;
 import org.apache.geode.cache.execute.ResultCollector;
 import org.apache.geode.cache.lucene.internal.directory.DumpDirectoryFiles;
+import org.apache.geode.cache.lucene.internal.distributed.PokeLuceneAsyncQueueFunction;
 import org.apache.geode.cache.lucene.internal.filesystem.FileSystemStats;
 import org.apache.geode.cache.lucene.internal.partition.BucketTargetingFixedResolver;
 import org.apache.geode.cache.lucene.internal.partition.BucketTargetingResolver;
@@ -39,14 +47,22 @@ import org.apache.geode.distributed.internal.DM;
 import org.apache.geode.distributed.internal.ReplyException;
 import org.apache.geode.distributed.internal.ReplyProcessor21;
 import org.apache.geode.distributed.internal.membership.InternalDistributedMember;
+import org.apache.geode.internal.cache.BucketRegion;
+import org.apache.geode.internal.cache.BucketRegionQueue;
 import org.apache.geode.internal.cache.InternalCache;
 import org.apache.geode.internal.cache.PartitionedRegion;
+import org.apache.geode.internal.cache.PrimaryBucketException;
+import org.apache.geode.internal.cache.wan.AbstractGatewaySender;
+import org.apache.geode.internal.cache.wan.parallel.ConcurrentParallelGatewaySenderEventProcessor;
+import org.apache.geode.internal.cache.wan.parallel.ConcurrentParallelGatewaySenderQueue;
+import org.apache.geode.internal.cache.wan.parallel.ParallelGatewaySenderEventProcessor;
 
 /* wrapper of IndexWriter */
 public class LuceneIndexForPartitionedRegion extends LuceneIndexImpl {
   protected Region fileAndChunkRegion;
   protected final FileSystemStats fileSystemStats;
 
+  private StuckThreadCleaner stuckCleanerThread;
   public static final String FILES_REGION_SUFFIX = ".files";
 
   public LuceneIndexForPartitionedRegion(String indexName, String regionPath, InternalCache cache) {
@@ -166,7 +182,9 @@ public class LuceneIndexForPartitionedRegion extends LuceneIndexImpl {
     return createRegion(regionName, attributes);
   }
 
-  public void close() {}
+  public void close() {
+    stuckCleanerThread.finish();
+  }
 
   @Override
   public void dumpFiles(final String directory) {
@@ -233,5 +251,75 @@ public class LuceneIndexForPartitionedRegion extends LuceneIndexImpl {
         Thread.currentThread().interrupt();
       }
     }
+  }
+
+  @Override
+  protected AsyncEventQueue createAEQ(Region dataRegion) {
+    AsyncEventQueueImpl queue = (AsyncEventQueueImpl) super.createAEQ(dataRegion);
+    startStuckCleaner(queue);
+    return queue;
+  }
+
+  private void startStuckCleaner(AsyncEventQueueImpl queue) {
+    stuckCleanerThread = new StuckThreadCleaner(queue);
+    Thread t = new Thread(stuckCleanerThread);
+    t.setDaemon(true);
+    t.start();
+  }
+
+  private static class StuckThreadCleaner implements Runnable {
+    private boolean done = false;
+    AsyncEventQueueImpl queue;
+
+    public StuckThreadCleaner(AsyncEventQueueImpl queue) {
+      this.queue = queue;
+    }
+
+    public void run() {
+      AbstractGatewaySender sender = (AbstractGatewaySender) queue.getSender();
+      List<ParallelGatewaySenderEventProcessor> processors =
+          ((ConcurrentParallelGatewaySenderEventProcessor) sender.getEventProcessor())
+              .getProcessors();
+
+      ConcurrentParallelGatewaySenderQueue prq =
+          (ConcurrentParallelGatewaySenderQueue) sender.getQueue();
+      PartitionedRegion pr = (PartitionedRegion) prq.getRegion();
+      HashMap lastPeekedEvents = new HashMap();
+
+      while (!done) {
+        try {
+          for (BucketRegion br : pr.getDataStore().getAllLocalBucketRegions()) {
+            if (!br.getBucketAdvisor().isPrimary()) {
+              AsyncEvent currentFirst = (AsyncEvent) ((BucketRegionQueue) br).firstEventSeqNum();
+              AsyncEvent lastPeek = (AsyncEvent) lastPeekedEvents.put(br, currentFirst);
+              if (currentFirst.equals(lastPeek)) {
+                redistributeEvents(lastPeek);
+              }
+            } else {
+              lastPeekedEvents.put(br, null);
+            }
+          }
+          Thread.sleep(10000);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+        }
+      }
+    }
+
+    public void finish() {
+      this.done = true;
+    }
+
+    private void redistributeEvents(final AsyncEvent event) {
+      try {
+        logger.info("JASON unsticking event:" + event.getKey() + ":" + event);
+        FunctionService.onRegion(event.getRegion())
+            .withArgs(new Object[] {event.getRegion().getName(), event.getKey(), event})
+            .execute(PokeLuceneAsyncQueueFunction.ID);
+      } catch (RegionDestroyedException | PrimaryBucketException | CacheClosedException e) {
+        logger.debug("Unable to redistribute async event for :" + event.getKey() + " : " + event);
+      }
+    }
+
   }
 }

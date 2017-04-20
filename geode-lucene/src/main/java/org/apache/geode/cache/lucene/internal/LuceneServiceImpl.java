@@ -19,6 +19,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.geode.cache.lucene.internal.distributed.LuceneQueryFunction;
+import org.apache.geode.cache.lucene.internal.distributed.PokeLuceneAsyncQueueFunction;
 import org.apache.geode.cache.lucene.internal.management.LuceneServiceMBean;
 import org.apache.geode.cache.lucene.internal.management.ManagementIndexListener;
 import org.apache.geode.cache.lucene.internal.results.LuceneGetPageFunction;
@@ -101,6 +102,7 @@ public class LuceneServiceImpl implements InternalLuceneService {
     FunctionService.registerFunction(new LuceneGetPageFunction());
     FunctionService.registerFunction(new WaitUntilFlushedFunction());
     FunctionService.registerFunction(new DumpDirectoryFiles());
+    FunctionService.registerFunction(new PokeLuceneAsyncQueueFunction());
     registerDataSerializables();
   }
 
