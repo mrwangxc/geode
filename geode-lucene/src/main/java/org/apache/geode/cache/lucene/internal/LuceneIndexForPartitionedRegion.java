@@ -292,7 +292,7 @@ public class LuceneIndexForPartitionedRegion extends LuceneIndexImpl {
             if (!br.getBucketAdvisor().isPrimary()) {
               AsyncEvent currentFirst = (AsyncEvent) ((BucketRegionQueue) br).firstEventSeqNum();
               AsyncEvent lastPeek = (AsyncEvent) lastPeekedEvents.put(br, currentFirst);
-              if (currentFirst.equals(lastPeek)) {
+              if (currentFirst != null && currentFirst.equals(lastPeek)) {
                 redistributeEvents(lastPeek);
               }
             } else {
