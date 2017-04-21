@@ -117,6 +117,8 @@ public class LuceneEventListenerJUnitTest {
         .thenThrow(BucketNotFoundException.class);
 
     LuceneEventListener listener = new LuceneEventListener(manager);
+    listener = spy(listener);
+    doNothing().when(listener).redistributeEvents(any());
     listener.logger = log;
     AsyncEvent event = Mockito.mock(AsyncEvent.class);
     boolean result = listener.processEvents(Arrays.asList(new AsyncEvent[] {event}));
