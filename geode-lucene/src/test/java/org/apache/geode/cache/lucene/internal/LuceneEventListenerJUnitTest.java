@@ -121,7 +121,7 @@ public class LuceneEventListenerJUnitTest {
     AsyncEvent event = Mockito.mock(AsyncEvent.class);
     boolean result = listener.processEvents(Arrays.asList(new AsyncEvent[] {event}));
     assertFalse(result);
-    verify(log, never()).error(anyString(), any(Exception.class));
+    verify(listener, times(1)).redistributeEvents(any());
   }
 
   @Test

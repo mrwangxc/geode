@@ -130,7 +130,7 @@ public class LuceneEventListener implements AsyncEventListener {
     }
   }
 
-  private void redistributeEvents(final List<AsyncEvent> events) {
+  void redistributeEvents(final List<AsyncEvent> events) {
     for (AsyncEvent event : events) {
       try {
         FunctionService.onRegion(event.getRegion())
